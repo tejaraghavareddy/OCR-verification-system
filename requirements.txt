@@ -1,0 +1,13 @@
+# IDVerify - offline identity verification runtime
+#
+# Everything here installs from PyPI wheels and never fetches a model at runtime:
+#   * rapidocr ships its three ONNX models inside the wheel (verified in site-packages/rapidocr/models)
+#   * YuNet detection + SFace recognition weights are vendored in ./models
+rapidocr>=3.10,<4
+onnxruntime>=1.17
+opencv-python-headless>=4.8
+numpy>=1.24
+pillow>=10.0
+
+# Dev / test
+pytest>=8.0
