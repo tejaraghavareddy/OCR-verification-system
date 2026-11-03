@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Optional
@@ -52,7 +53,44 @@ CREATE TABLE IF NOT EXISTS verifications (
 
 CREATE INDEX IF NOT EXISTS idx_persons_id_number ON persons(id_number);
 CREATE INDEX IF NOT EXISTS idx_verifications_at  ON verifications(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS attendances (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at        TEXT    NOT NULL,
+    result            TEXT    NOT NULL,
+    id_number         TEXT,
+    full_name         TEXT,
+    enrolled          INTEGER NOT NULL DEFAULT 0,
+    live_vs_card      REAL,
+    live_vs_enrolled  REAL,
+    card_expired      INTEGER,
+    reasons           TEXT,
+    warnings          TEXT,
+    card_path         TEXT,
+    face_path         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendances_at ON attendances(created_at DESC);
 """
+
+
+@dataclass
+class AttendanceLog:
+    """One row of the daily attendance register."""
+
+    created_at: str
+    result: str
+    id_number: Optional[str]
+    full_name: Optional[str]
+    enrolled: bool
+    live_vs_card: Optional[float]
+    live_vs_enrolled: Optional[float]
+    card_expired: Optional[bool]
+    reasons: list[str] = dc_field(default_factory=list)
+    warnings: list[str] = dc_field(default_factory=list)
+    card_path: Optional[str] = None
+    face_path: Optional[str] = None
+    row_id: Optional[int] = None
 
 
 @dataclass
@@ -245,6 +283,69 @@ class Store:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+    # -- attendance ------------------------------------------------------
+    def log_attendance(self, entry: AttendanceLog) -> int:
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO attendances (created_at, result, id_number, full_name, enrolled,
+                                          live_vs_card, live_vs_enrolled, card_expired,
+                                          reasons, warnings, card_path, face_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry.created_at, entry.result, entry.id_number, entry.full_name,
+                    int(entry.enrolled),
+                    None if entry.live_vs_card is None else round(float(entry.live_vs_card), 6),
+                    None if entry.live_vs_enrolled is None else round(float(entry.live_vs_enrolled), 6),
+                    None if entry.card_expired is None else int(entry.card_expired),
+                    json.dumps(entry.reasons), json.dumps(entry.warnings),
+                    entry.card_path, entry.face_path,
+                ),
+            )
+            self._conn.commit()
+        entry.row_id = cursor.lastrowid
+        return entry.row_id
+
+    def today_attendances(self) -> list[AttendanceLog]:
+        """All attendance rows for today (UTC)."""
+        today = time.strftime("%Y-%m-%d")
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM attendances WHERE date(created_at) = ? ORDER BY id ASC",
+                (today,),
+            ).fetchall()
+        out: list[AttendanceLog] = []
+        for row in rows:
+            out.append(
+                AttendanceLog(
+                    row_id=row["id"],
+                    created_at=row["created_at"],
+                    result=row["result"],
+                    id_number=row["id_number"],
+                    full_name=row["full_name"],
+                    enrolled=bool(row["enrolled"]),
+                    live_vs_card=row["live_vs_card"],
+                    live_vs_enrolled=row["live_vs_enrolled"],
+                    card_expired=bool(row["card_expired"]) if row["card_expired"] is not None else None,
+                    reasons=_loads(row["reasons"]),
+                    warnings=_loads(row["warnings"]),
+                    card_path=row["card_path"],
+                    face_path=row["face_path"],
+                )
+            )
+        return out
+
+    def clear_today_attendances(self) -> int:
+        """Remove today's attendance rows; returns how many were deleted."""
+        today = time.strftime("%Y-%m-%d")
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM attendances WHERE date(created_at) = ?", (today,)
+            )
+            self._conn.commit()
+        return cursor.rowcount
 
     # -- helpers --------------------------------------------------------
     @staticmethod

@@ -36,17 +36,17 @@ def find_font(size: int):
 def build_card(
     target: Path,
     portrait: Path = OBAMA,
-    id_number: str = "4471-9938-2210",
-    name: str = "BARACK H. OBAMA",
-    date_of_birth: str = "04 AUG 1961",
-    date_of_expiry: str = "12 MAY 2032",
+    id_number: str = "TEST-001-ENROLL",
+    name: str = "Sample Student",
+    date_of_birth: str = "01 JAN 2000",
+    date_of_expiry: str = "31 DEC 2030",
 ) -> Path:
     """Render a plausible ID card with a real face as the printed portrait."""
     width, height = 1000, 630
     card = Image.new("RGB", (width, height), (238, 242, 248))
     draw = ImageDraw.Draw(card)
     draw.rectangle([0, 0, width, 90], fill=(24, 56, 110))
-    draw.text((34, 26), "REPUBLIC IDENTITY CARD", font=find_font(34), fill=(255, 255, 255))
+    draw.text((34, 26), "SCHOOL ID CARD", font=find_font(34), fill=(255, 255, 255))
 
     photo = Image.open(portrait).convert("RGB").resize((300, 380))
     card.paste(photo, (40, 140))
@@ -57,8 +57,8 @@ def build_card(
         ("ID NUMBER", id_number),
         ("DATE OF BIRTH", date_of_birth),
         ("DATE OF EXPIRY", date_of_expiry),
-        ("SEX", "M"),
-        ("NATIONALITY", "AMERICAN"),
+        ("SEX", "F"),
+        ("NATIONALITY", "LOCAL"),
     ]
     y = 150
     for label, value in fields:

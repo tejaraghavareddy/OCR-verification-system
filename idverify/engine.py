@@ -333,6 +333,9 @@ class IdentitySystem:
     def forget(self, id_number: str) -> bool:
         return self.store.delete_person(id_number)
 
+    def count_persons(self) -> int:
+        return self.store.count_persons()
+
     # ------------------------------------------------------------------ #
     @staticmethod
     def _decide(live, live_vs_card, live_vs_enrolled, expired) -> str:

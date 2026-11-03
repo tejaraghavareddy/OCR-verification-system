@@ -58,6 +58,17 @@ def build_parser() -> argparse.ArgumentParser:
     forget = sub.add_parser("forget", help="remove an enrolled identity")
     forget.add_argument("--id", required=True, dest="id_number", metavar="ID_NUMBER")
 
+    attend = sub.add_parser("attend", help="live camera attendance / enrollment capture")
+    attend.add_argument("--camera", type=int, default=0, metavar="INDEX",
+                       help="camera index (default: 0)")
+    attend.add_argument("--enroll", action="store_true",
+                       help="also enroll the identity when verification succeeds")
+    attend.add_argument("--list", action="store_true",
+                       help="print today's attendance register")
+    attend.add_argument("--export", metavar="FILE", default=None,
+                       help="export today's register as CSV")
+    attend.add_argument("--clear", action="store_true",
+                       help="clear today's attendance register")
     sub.add_parser("gui", help="launch the desktop interface (default)")
     return parser
 
@@ -82,6 +93,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _cmd_enroll(system, args)
         if args.command == "verify":
             return _cmd_verify(system, args)
+        if args.command == "attend":
+            return _cmd_attend(args)
         if args.command == "history":
             return _cmd_history(system, args)
         if args.command == "list":
