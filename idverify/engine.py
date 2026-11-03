@@ -1,4 +1,4 @@
-"""The verification system itself: enrolment, 1:1 checks and the audit trail.
+"""Verification engine: enrolment, 1:1 checks and the audit trail.
 
 Flow for one verification::
 
@@ -173,7 +173,9 @@ class IdentitySystem:
             self.store.images_dir / f"{stem}-face.png",
             self.face.crop(load_image(live_image), live.face),
         )
-        card_path = save_image(self.store.images_dir / f"{stem}-card.png", load_image(card_image))
+        card_path = save_image(
+            self.store.images_dir / f"{stem}-card.png", load_image(card_image)
+        )
 
         person = Person(
             id_number=id_number,
@@ -213,7 +215,7 @@ class IdentitySystem:
         reasons: list[str] = []
         warnings: list[str] = list(scan.warnings)
 
-        # Keep the original image array for the liveness check below
+        # Keep the original image array for the liveness check below.
         live_img = load_image(live_image)
 
         live: Optional[FaceEmbedding] = None
@@ -225,30 +227,36 @@ class IdentitySystem:
             reasons.append(str(exc))
 
         # ---- liveness check (printed-photo / phone-screen spoof guard) ----
-        # Only run when a real webcam is available. Two consecutive frames
-        # with different detection confidence strongly suggests a live face
-        # (a static photo / screen produces identical confidence both times).
-        # On headless CI / this cloud VM the check is skipped.
-        live_liveness_frames: list[np.ndarray] = []
+        # Two consecutive webcam frames with different detection confidence
+        # strongly suggests a live face. A static photo / screen produces
+        # essentially identical confidence both times.
+        #
+        # This check is webcam-only. On headless CI or this cloud VM it is
+        # skipped cleanly: the capture is opened and always released, even when
+        # fewer than two frames are available or the device is missing.
+        cap: Optional[cv2.VideoCapture] = None
         try:
             cap = cv2.VideoCapture(0)
-            acquired = []
+            acquired: list[np.ndarray] = []
             for _ in range(2):
                 ok, frame = cap.read()
                 if not ok:
                     break
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 acquired.append(rgb)
-            cap.release()
             if len(acquired) == 2:
-                # real two-frame webcam check
-                live_liveness_frames = acquired
-                self.face.live_liveness(live_liveness_frames, min_score_delta=0.10)
-            # else: fewer than 2 frames → skip liveness (headless environment)
+                self.face.live_liveness(acquired, min_score_delta=0.10)
         except Exception:
-            # No webcam, permission denied, or some other error:
-            # skip liveness check; it's a webcam-only feature.
+            # No webcam, permission denied, or any other webcam problem:
+            # skip liveness. It is a webcam-only feature and must never block
+            # verification on a machine without a working camera.
             pass
+        finally:
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
 
         card_vector: Optional[np.ndarray] = None
         if scan.portrait is not None and live is not None:
@@ -269,9 +277,13 @@ class IdentitySystem:
                 f"({self._describe(live_vs_card)})"
             )
         elif live is not None:
-            reasons.append("No usable portrait on the card, so the 1:1 card check was skipped.")
+            reasons.append(
+                "No usable portrait on the card, so the 1:1 card check was skipped."
+            )
 
-        person = self.store.get_person(fields.id_number) if fields.id_number else None
+        person = (
+            self.store.get_person(fields.id_number) if fields.id_number else None
+        )
         live_vs_enrolled: Optional[float] = None
         if person is not None and live is not None and person.embedding is not None:
             live_vs_enrolled = self.face.similarity(live.vector, person.embedding)
@@ -280,15 +292,21 @@ class IdentitySystem:
                 f"({self._describe(live_vs_enrolled)})"
             )
         elif not fields.id_number:
-            reasons.append("ID number unreadable, so no local record could be looked up.")
+            reasons.append(
+                "ID number unreadable, so no local record could be looked up."
+            )
         elif person is None:
-            reasons.append("ID number is not in the local database; only the card portrait was checked.")
+            reasons.append(
+                "ID number is not in the local database; only the card portrait was checked."
+            )
 
         expired = is_expired(fields.date_of_expiry)
         if expired:
             reasons.append(f"Card expired on {fields.date_of_expiry}.")
         elif expired is None and not fields.date_of_expiry:
-            warnings.append("Expiry date unreadable; card validity could not be checked.")
+            warnings.append(
+                "Expiry date unreadable; card validity could not be checked."
+            )
 
         verdict = self._decide(live, live_vs_card, live_vs_enrolled, expired)
 
@@ -363,4 +381,6 @@ class IdentitySystem:
 
 
 def _safe(value: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in value)[:48] or "id"
+    return "".join(
+        ch if ch.isalnum() or ch in "-_" else "_" for ch in value
+    )[:48] or "id"
