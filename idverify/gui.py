@@ -381,6 +381,11 @@ class VerifyTab(ttk.Frame):
             justify="left",
         ).pack(anchor="w")
 
+    def clear(self) -> None:
+        self.card.clear()
+        self.face.clear()
+        self._build_empty()
+
     def start(self) -> None:
         if not self.card.ready or not self.face.ready:
             self.app.prestyle_messagebox(
@@ -465,11 +470,6 @@ class VerifyTab(ttk.Frame):
                 wraplength=520,
             ).pack(anchor="w", pady=(6, 0))
 
-    def clear(self) -> None:
-        self.card.clear()
-        self.face.clear()
-        self._build_empty()
-
 
 class EnrollTab(ttk.Frame):
     def __init__(self, master, app: "App") -> None:
@@ -495,9 +495,9 @@ class EnrollTab(ttk.Frame):
 
         inputs = ttk.Frame(self)
         inputs.pack(side="left", fill="y", padx=(0, 12))
-        self.card = CapturePanel(inputs, "1 - ID card", app)
+        self.card: CapturePanel = CapturePanel(inputs, "1 - ID card", app)
         self.card.pack(fill="x")
-        self.face = CapturePanel(
+        self.face: CapturePanel = CapturePanel(
             inputs, "2 - Live capture of the holder", app
         )
         self.face.pack(fill="x", pady=(10, 0))
@@ -525,6 +525,14 @@ class EnrollTab(ttk.Frame):
         self.message.delete("1.0", "end")
         self.message.insert("1.0", text)
         self.message.configure(state="disabled")
+
+    def clear(self) -> None:
+        self.card.clear()
+        self.face.clear()
+        self._set(
+            "Add the card and the live capture on the left, then press\n"
+            "ENROLL IDENTITY."
+        )
 
     def start(self) -> None:
         if not self.card.ready or not self.face.ready:
